@@ -262,8 +262,8 @@ public class DungeonGenerator : MonoBehaviour
                 tris.Add(floorI + 3);
                     
                 uvs.Add( new Vector2(0, 0));
-                uvs.Add( new Vector2(0, 2));
-                uvs.Add( new Vector2(1, 2));
+                uvs.Add( new Vector2(0, 1));
+                uvs.Add( new Vector2(1, 1));
                 uvs.Add( new Vector2(1, 0));
                 
                 // Ceiling
@@ -282,8 +282,8 @@ public class DungeonGenerator : MonoBehaviour
                 tris.Add(ceilI);
                 
                 uvs.Add( new Vector2(0, 0));
-                uvs.Add( new Vector2(0, 2));
-                uvs.Add( new Vector2(1, 2));
+                uvs.Add( new Vector2(0, 1));
+                uvs.Add( new Vector2(1, 1));
                 uvs.Add( new Vector2(1, 0));
 
                 // North wall
