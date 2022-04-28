@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using Random = UnityEngine.Random;
 
 /// <summary>
@@ -10,6 +11,7 @@ using Random = UnityEngine.Random;
 /// - There is a small change the player will spawn in an unreachable room
 /// - Corridors are generated using sampled sweeps along the horizontal and vertical axis
 ///   this may result in the having square-like corridor patterns
+/// - More rooms are needed to generate a dungeon that is actually playable and interconnected
 /// </summary>
 
 public enum CellState
@@ -39,7 +41,8 @@ public class DungeonGenerator : MonoBehaviour
 {
     [SerializeField] private int _gridSizeX = 100;
     [SerializeField] private int _gridSizeY = 100;
-    [SerializeField] private int _roomCount = 50;
+    [SerializeField] private int _minRoomCount = 30;
+    [SerializeField] private int _maxRoomCount = 50;
     [SerializeField] private int _roomMinWidth = 5;
     [SerializeField] private int _roomMaxWidth = 10;
     [SerializeField] private int _roomMinHeight = 5;
@@ -54,13 +57,102 @@ public class DungeonGenerator : MonoBehaviour
 
     private CellState[,] _gridData;
     private List<Room> _rooms = new List<Room>();
+
+    private MeshFilter _meshFilter;
+    private MeshRenderer _meshRenderer;
+    private MeshCollider _meshCollider;
+
+    private InputField _gridSizeXInput;
+    private InputField _gridSizeYInput;
+    private InputField _minRoomCountInput;
+    private InputField _maxRoomCountInput;
+    private InputField _minRoomWidthInput;
+    private InputField _maxRoomWidthInput;
+    private InputField _minRoomLengthInput;
+    private InputField _maxRoomLengthInput;
+    private InputField _attemptsPerRoomInput;
+    private InputField _corridorSampleInput;
+    private InputField _corridorWidthInput;
+
+    private GameObject _spawnButtonObj;
+    private GameObject _returnText;
+    private GameObject _menuPanel;
     
+    private GameObject _player;
+
     private void Start()
     {
-        if (Application.isEditor)
+        _meshFilter = GetComponent<MeshFilter>();
+        _meshRenderer = GetComponent<MeshRenderer>();
+        _meshCollider = GetComponent<MeshCollider>();
+
+        _spawnButtonObj = GameObject.Find("SpawnButton");
+        _returnText = GameObject.Find("ReturnText");
+        _menuPanel = GameObject.Find("MenuPanel");
+        
+        _spawnButtonObj.SetActive(false);
+        _returnText.SetActive(false);
+
+        _gridSizeXInput = GameObject.Find("GridSizeXInput").GetComponent<InputField>();
+        _gridSizeYInput = GameObject.Find("GridSizeYInput").GetComponent<InputField>();
+        _minRoomCountInput = GameObject.Find("MinRoomCountInput").GetComponent<InputField>();
+        _maxRoomCountInput = GameObject.Find("MaxRoomCountInput").GetComponent<InputField>();
+        _minRoomWidthInput = GameObject.Find("MinRoomWidthInput").GetComponent<InputField>();
+        _maxRoomWidthInput = GameObject.Find("MaxRoomWidthInput").GetComponent<InputField>();
+        _minRoomLengthInput = GameObject.Find("MinRoomLengthInput").GetComponent<InputField>();
+        _maxRoomLengthInput = GameObject.Find("MaxRoomLengthInput").GetComponent<InputField>();
+        _attemptsPerRoomInput = GameObject.Find("AttemptsPerRoomInput").GetComponent<InputField>();
+        _corridorSampleInput = GameObject.Find("CorridorSampleInput").GetComponent<InputField>();
+        _corridorWidthInput = GameObject.Find("CorridorWidthInput").GetComponent<InputField>();
+        
+        _gridSizeXInput.text = _gridSizeX.ToString();
+        _gridSizeYInput.text = _gridSizeY.ToString();
+        _minRoomCountInput.text = _minRoomCount.ToString();
+        _maxRoomCountInput.text = _maxRoomCount.ToString();
+        _minRoomWidthInput.text = _roomMinWidth.ToString();
+        _maxRoomWidthInput.text = _roomMaxWidth.ToString();
+        _minRoomLengthInput.text = _roomMinHeight.ToString();
+        _maxRoomLengthInput.text = _roomMaxHeight.ToString();
+        _attemptsPerRoomInput.text = _attemptsPerRoom.ToString();
+        _corridorSampleInput.text = _corridorSample.ToString();
+        _corridorWidthInput.text = _corridorWidth.ToString();
+    }
+    
+    private void Update()
+    {
+        if (_player != null)
         {
-            UnityEditor.EditorWindow.FocusWindowIfItsOpen(typeof(UnityEditor.SceneView));
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                Destroy(_player);
+                _returnText.SetActive(false);
+                _menuPanel.SetActive(true);
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
+            }
         }
+    }
+
+    public void QuitApp()
+    {
+        Application.Quit();
+    }
+
+    public void Generate()
+    {
+        _spawnButtonObj.SetActive(true);
+        
+        _gridSizeX = int.Parse(_gridSizeXInput.text);
+        _gridSizeY = int.Parse(_gridSizeYInput.text);
+        _minRoomCount = int.Parse(_minRoomCountInput.text);
+        _maxRoomCount = int.Parse(_maxRoomCountInput.text);
+        _roomMinWidth = int.Parse(_minRoomWidthInput.text);
+        _roomMaxWidth = int.Parse(_maxRoomWidthInput.text);
+        _roomMinHeight = int.Parse(_minRoomLengthInput.text);
+        _roomMaxHeight = int.Parse(_maxRoomLengthInput.text);
+        _attemptsPerRoom = int.Parse(_attemptsPerRoomInput.text);
+        _corridorSample = int.Parse(_corridorSampleInput.text);
+        _corridorWidth = int.Parse(_corridorWidthInput.text);
 
         _gridData = new CellState[_gridSizeX, _gridSizeY];
         for (var x = 0; x < _gridSizeX; x++)
@@ -71,27 +163,27 @@ public class DungeonGenerator : MonoBehaviour
             }
         }
         
-        GenerateRooms(_roomCount);
+        GenerateRooms();
         
         PlaceRooms();
 
         PlaceHallways();
         
         RenderDungeon();
+    }
 
+    public void SpawnPlayer()
+    {
         var firstRoom = _rooms[0];
-        var playerpos = new Vector3(
+        var playerPos = new Vector3(
             firstRoom.gridPosition.x + (firstRoom.Width * 0.5F),
             1,
             firstRoom.gridPosition.y + (firstRoom.Length * 0.5F)
         );
-
-        Instantiate(playerPrefab, playerpos, Quaternion.identity);
-    }
-
-    private void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.Escape)) Application.Quit();
+        _player = Instantiate(playerPrefab, playerPos, Quaternion.identity);
+        
+        _returnText.SetActive(true);
+        _menuPanel.SetActive(false);
     }
 
     private void PlaceHallways()
@@ -148,8 +240,11 @@ public class DungeonGenerator : MonoBehaviour
         }
     }
 
-    private void GenerateRooms(int roomCount)
+    private void GenerateRooms()
     {
+        var roomCount = Random.Range(_minRoomCount, _maxRoomCount);
+        
+        _rooms.Clear();
         for (var i = 0; i < roomCount; i++)
         {
             var room = new Room(Random.Range(_roomMinWidth, _roomMaxWidth), Random.Range(_roomMinHeight, _roomMaxHeight));
@@ -230,17 +325,13 @@ public class DungeonGenerator : MonoBehaviour
     
     private void RenderDungeon()
     {
-        var meshRenderer = gameObject.AddComponent<MeshRenderer>();
-        meshRenderer.sharedMaterial = mat;
+        _meshRenderer.sharedMaterial = mat;
         
-        var meshFilter = gameObject.AddComponent<MeshFilter>();
-
         var mesh = new Mesh();
         var verts = new List<Vector3>();
         var tris = new List<int>();
         var uvs = new List<Vector2>();
 
-        // var i = 0;
         for (var x = 0; x < _gridSizeX; x++)
         {
             for (var y = 0; y < _gridSizeY; y++)
@@ -380,15 +471,14 @@ public class DungeonGenerator : MonoBehaviour
             }
         }
 
-        var mc = gameObject.AddComponent<MeshCollider>();
-        mc.sharedMesh = null;
+        _meshCollider.sharedMesh = null;
         
         mesh.vertices = verts.ToArray();
         mesh.triangles = tris.ToArray();
         mesh.uv = uvs.ToArray();
         mesh.RecalculateNormals();
         
-        meshFilter.mesh = mesh;
-        mc.sharedMesh = mesh;
+        _meshFilter.mesh = mesh;
+        _meshCollider.sharedMesh = mesh;
     }
 }
